@@ -27,7 +27,7 @@ CHART_CONFIG = {
 }
 
 load_dotenv()
-st.set_page_config(page_title="Macro Economic Dashboard", layout="wide")
+st.set_page_config(page_title="Macro Dashboard", layout="wide")
 
 def get_credentials():
     """Load GCP credentials from Streamlit secrets or environment variables."""
