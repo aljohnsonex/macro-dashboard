@@ -293,21 +293,48 @@ def create_line_chart(df_plot, value_col, metric_name, tooltip_date_format, yaxi
 def create_gauge_chart(most_recent_percentile, current_value_text, color_20th, color_80th, 
                       percentile_period_display, include_annotations=True, title_below=False,
                       target_min=None, target_max=None, current_value=None,
-                      data_min=None, data_max=None, format_value=None, has_full_period=True):
+                      data_min=None, data_max=None, format_value=None, has_full_period=True, is_growth=False):
     """Create and configure the gauge chart."""
     domain_y = [0.3, 1] if title_below else [0, 1]
     use_targets = (target_min is not None and pd.notna(target_min)) or (target_max is not None and pd.notna(target_max))
     
     if use_targets and current_value is not None and pd.notna(current_value) and data_min is not None and data_max is not None:
         threshold_color = 'black'
-        t_min = target_min if target_min is not None and pd.notna(target_min) else data_min
-        t_max = target_max if target_max is not None and pd.notna(target_max) else data_max
-        target_center = (t_min + t_max) / 2
-        target_range_span = max(0.1, t_max - t_min)
-        gauge_range_span = target_range_span / 0.3
-        axis_min = target_center - gauge_range_span / 2
-        axis_max = target_center + gauge_range_span / 2
         
+        # Convert target values if they're percentages stored as whole numbers (e.g., 5 for 5%)
+        # Check if targets are > 1 and data is < 1, indicating targets need conversion
+        if is_growth and target_min is not None and pd.notna(target_min) and target_min > 1 and data_max < 1:
+            target_min = target_min / 100
+        if is_growth and target_max is not None and pd.notna(target_max) and target_max > 1 and data_max < 1:
+            target_max = target_max / 100
+        
+        # Handle cases where only one target is provided
+        if target_min is not None and target_max is not None and pd.notna(target_min) and pd.notna(target_max):
+            # Both targets provided - center the target range on the gauge
+            target_center = (target_min + target_max) / 2
+            target_range_span = abs(target_max - target_min)
+            # Make gauge range 2.5x the target range to center it nicely
+            gauge_range_span = target_range_span * 2.5
+            axis_min = target_center - gauge_range_span / 2
+            axis_max = target_center + gauge_range_span / 2
+        elif target_min is not None and pd.notna(target_min):
+            # Only min target - center around target_min
+            target_range_span = abs(data_max - data_min) * 0.3 if data_max is not None and data_min is not None else abs(target_min) * 0.3
+            gauge_range_span = target_range_span * 2.5
+            axis_min = target_min - gauge_range_span / 2
+            axis_max = target_min + gauge_range_span / 2
+        elif target_max is not None and pd.notna(target_max):
+            # Only max target - center around target_max
+            target_range_span = abs(data_max - data_min) * 0.3 if data_max is not None and data_min is not None else abs(target_max) * 0.3
+            gauge_range_span = target_range_span * 2.5
+            axis_min = target_max - gauge_range_span / 2
+            axis_max = target_max + gauge_range_span / 2
+        else:
+            # Fallback to data range
+            axis_min = data_min
+            axis_max = data_max
+        
+        # Final safety checks
         if not pd.notna(axis_min) or math.isinf(axis_min):
             axis_min = data_min - (data_max - data_min) * 0.1 if data_min is not None and data_max is not None else 0
         if not pd.notna(axis_max) or math.isinf(axis_max):
@@ -434,7 +461,8 @@ def process_metric_gauge_only(df_metric, percentile_period, start_date):
                                    data['color_80th'], percentile_period, include_annotations=False, title_below=True,
                                    target_min=data['target_min'], target_max=data['target_max'], 
                                    current_value=most_recent_value, data_min=data_min, data_max=data_max,
-                                   format_value=data['format_value'], has_full_period=data.get('has_full_period', True))
+                                   format_value=data['format_value'], has_full_period=data.get('has_full_period', True),
+                                   is_growth=data['is_growth'])
     
     return {
         'metric_name': data['metric_name'],
@@ -498,7 +526,8 @@ def process_metric(df_metric, percentile_period, start_date):
                                    data['color_80th'], percentile_period,
                                    target_min=data['target_min'], target_max=data['target_max'], 
                                    current_value=most_recent_value, data_min=data_min, data_max=data_max,
-                                   format_value=data['format_value'], has_full_period=data.get('has_full_period', True))
+                                   format_value=data['format_value'], has_full_period=data.get('has_full_period', True),
+                                   is_growth=data['is_growth'])
     
     return {
         'metric_name': data['metric_name'],
