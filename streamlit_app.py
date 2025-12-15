@@ -30,7 +30,40 @@ load_dotenv()
 st.set_page_config(page_title="Macro Economic Dashboard", layout="wide")
 
 def get_credentials():
-    """Load GCP credentials from environment variables."""
+    """Load GCP credentials from Streamlit secrets or environment variables."""
+    # First check Streamlit secrets
+    try:
+        if hasattr(st, 'secrets') and 'GCP_CREDENTIALS_FILE' in st.secrets:
+            creds_file = st.secrets['GCP_CREDENTIALS_FILE']
+            if creds_file and os.path.exists(creds_file):
+                try:
+                    with open(creds_file, 'r') as f:
+                        return service_account.Credentials.from_service_account_info(
+                            json.load(f), scopes=["https://www.googleapis.com/auth/bigquery"]
+                        )
+                except Exception as e:
+                    st.error(f"Error reading credentials file from secrets: {e}")
+                    st.stop()
+        
+        if hasattr(st, 'secrets') and 'GCP_CREDENTIALS_JSON' in st.secrets:
+            creds_json = st.secrets['GCP_CREDENTIALS_JSON']
+            if creds_json:
+                creds_json = str(creds_json).strip().strip('"').strip("'").replace('\\n', '\n').replace('\\"', '"').replace("\\'", "'")
+                try:
+                    return service_account.Credentials.from_service_account_info(
+                        json.loads(creds_json), scopes=["https://www.googleapis.com/auth/bigquery"]
+                    )
+                except json.JSONDecodeError as e:
+                    st.error(f"Invalid JSON in GCP_CREDENTIALS_JSON from secrets: {e}")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"Error loading credentials from secrets: {e}")
+                    st.stop()
+    except Exception as e:
+        # If secrets access fails, fall through to environment variables
+        pass
+    
+    # Fall back to environment variables
     creds_file = os.getenv("GCP_CREDENTIALS_FILE")
     if creds_file and os.path.exists(creds_file):
         try:
@@ -44,7 +77,7 @@ def get_credentials():
     
     creds_json = os.getenv("GCP_CREDENTIALS_JSON")
     if not creds_json:
-        st.error("GCP_CREDENTIALS_FILE or GCP_CREDENTIALS_JSON must be set in .env file")
+        st.error("GCP_CREDENTIALS_FILE or GCP_CREDENTIALS_JSON must be set in Streamlit secrets or .env file")
         st.stop()
     
     creds_json = creds_json.strip().strip('"').strip("'").replace('\\n', '\n').replace('\\"', '"').replace("\\'", "'")
